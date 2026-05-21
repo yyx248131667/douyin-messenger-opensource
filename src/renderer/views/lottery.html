@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>自动福袋检测控制</title>
+  <style>
+    :root {
+      --primary: #1890ff;
+      --primary-hover: #40a9ff;
+      --danger: #ff4d4f;
+      --danger-hover: #ff7875;
+      --success: #52c41a;
+      --success-hover: #73d13d;
+      --warning: #faad14;
+      --bg: #f5f7fa;
+      --card-bg: #ffffff;
+      --text: #333333;
+      --border: #e8e8e8;
+      --radius: 8px;
+    }
+    body { 
+      font-family: -apple-system, 'Segoe UI', sans-serif; 
+      background: var(--bg); 
+      color: var(--text); 
+      margin: 0; 
+      padding: 20px; 
+      display: flex; 
+      flex-direction: column; 
+      height: 100vh; 
+      box-sizing: border-box; 
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .row { 
+      display: flex; 
+      align-items: center; 
+      margin-bottom: 12px; 
+      gap: 12px; 
+      flex-wrap: wrap;
+    }
+    .row:last-child { margin-bottom: 0; }
+    
+    .label {
+      font-size: 14px; 
+      font-weight: 600; 
+      color: #555;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .btn { 
+      background: var(--primary); 
+      color: white; 
+      border: none; 
+      padding: 8px 16px; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .btn:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+    .btn:active { transform: translateY(0); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .btn:disabled { background: #d9d9d9; cursor: not-allowed; box-shadow: none; transform: none; }
+    
+    .btn.stop { background: var(--danger); }
+    .btn.stop:hover { background: var(--danger-hover); }
+    .btn.success { background: var(--success); }
+    .btn.success:hover { background: var(--success-hover); }
+    .btn.warning { background: var(--warning); color: #fff; }
+    .btn.warning:hover { background: #ffc53d; }
+    .btn.small { padding: 6px 12px; font-size: 13px; }
+    
+    .input {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2); }
+    .input-number { width: 80px; text-align: center; }
+
+    .account-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 4px 0;
+      min-height: 30px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .account-item {
+      display: inline-flex;
+      align-items: center;
+      background: #fff;
+      padding: 5px 14px;
+      border-radius: 16px;
+      font-size: 13px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .account-item:hover { border-color: var(--primary); }
+    .account-item.selected {
+      background: var(--success);
+      color: #fff;
+      border-color: var(--success);
+    }
+    
+    .status-log {
+      margin-top: 16px; 
+      font-size: 13px; 
+      color: #444; 
+      background: #fff; 
+      padding: 12px; 
+      border: 1px solid var(--border); 
+      border-radius: var(--radius); 
+      flex: 1;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: 'Consolas', monospace;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .log-item { margin-bottom: 6px; line-height: 1.4; border-bottom: 1px dashed #f0f0f0; padding-bottom: 4px; }
+    .log-time { color: #888; margin-right: 8px; font-size: 12px; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 16px; text-align: center; }
+    .stat-card { background: #fafafa; border: 1px solid #f0f0f0; padding: 15px; border-radius: 6px; }
+    .stat-card__value { font-size: 24px; font-weight: bold; color: #333; }
+    .stat-card__label { color: #999; font-size: 13px; margin-top: 5px; }
+  </style>
+
+<style>
+    /* 防呆：禁止全局选择 */
+    body { user-select: none; -webkit-user-select: none; }
+    input, textarea { user-select: text; -webkit-user-select: text; }
+    </style>
+
+</head>
+<body>
+
+  <div class="card">
+    <div class="row" style="justify-content: space-between;">
+      <span class="label" style="margin:0;">选择检测账号（可多选）</span>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn small" id="btn-sel-all">全选</button>
+        <button class="btn small stop" id="btn-sel-none">清空</button>
+        <button class="btn small warning" id="btn-refresh">刷新</button>
+      </div>
+    </div>
+    <div class="account-list" id="account-list">
+      <span style="color:#999; font-size:13px; margin:auto;">加载中...</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div style="flex: 1;">
+        <span class="label">自动检测间隔时间 (分钟)</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="number" class="input input-number" id="lottery-interval" value="1" min="1" max="60" />
+          <span style="color:#666;">分/次</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-card__value" id="statDetected">0</div>
+        <div class="stat-card__label">检测次数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value" id="statFound" style="color: #52c41a;">0</div>
+        <div class="stat-card__label">发现福袋</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value" id="statClaimed" style="color: #1890ff;">0</div>
+        <div class="stat-card__label">成功参与</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top: 8px;">
+    <button class="btn success" id="btn-test" style="flex: 1; padding: 12px; font-size: 15px; white-space: nowrap;">立即单次检测</button>
+    <button class="btn warning" id="btn-auto-start" style="flex: 1; padding: 12px; font-size: 15px; white-space: nowrap;">开始自动循环</button>
+    <button class="btn stop" id="btn-auto-stop" disabled style="flex: 1; padding: 12px; font-size: 15px; white-space: nowrap;">停止</button>
+  </div>
+
+  <div class="status-log" id="status-log">
+    <div class="log-item"><span class="log-time">[就绪]</span>福袋检测已准备完毕。</div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    const accountListEl = document.getElementById('account-list');
+    const intervalInput = document.getElementById('lottery-interval');
+    
+    const btnTest = document.getElementById('btn-test');
+    const btnAutoStart = document.getElementById('btn-auto-start');
+    const btnAutoStop = document.getElementById('btn-auto-stop');
+    const statusLog = document.getElementById('status-log');
+    
+    const statDetected = document.getElementById('statDetected');
+    const statFound = document.getElementById('statFound');
+    const statClaimed = document.getElementById('statClaimed');
+
+    let allAccounts = [];
+    let autoTaskEnabled = false;
+    let autoTaskTimer = null;
+    let detectedCount = 0;
+    let foundCount = 0;
+    let claimedCount = 0;
+
+    // ==================== 日志 ====================
+    function addLog(msg, color = '#333') {
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = 'log-item';
+      div.style.color = color;
+      div.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
+      statusLog.appendChild(div);
+      statusLog.scrollTop = statusLog.scrollHeight;
+    }
+
+    // ==================== 账号加载 ====================
+    function renderAccountList(accounts) {
+      allAccounts = (accounts || []).sort((a, b) => {
+        const nameA = a.name || a.id || '';
+        const nameB = b.name || b.id || '';
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+      if (allAccounts.length === 0) {
+        accountListEl.innerHTML = '<span style="color:#999; font-size:13px; margin:auto;">未找到活动账号</span>';
+        return;
+      }
+      addLog(`已加载 ${allAccounts.length} 个账号`, '#52c41a');
+      accountListEl.innerHTML = allAccounts.map(acc => `
+        <span class="account-item selected" data-id="${acc.id}">${acc.name || acc.id}</span>
+      `).join('');
+      document.querySelectorAll('.account-item').forEach(el => {
+        el.addEventListener('click', () => el.classList.toggle('selected'));
+      });
+    }
+
+    async function loadAccounts() {
+      const startBtn = document.getElementById('btn-auto-start');
+      const testBtn = document.getElementById('btn-test');
+      if (startBtn) startBtn.disabled = true;
+      if (testBtn) testBtn.disabled = true;
+      try {
+        const saved = await ipcRenderer.invoke('read-accounts');
+        const active = (saved || []).filter(a => !a.isDeleted && !a.isClosed);
+        renderAccountList(active);
+      } catch (e) {
+        addLog('读取账号失败: ' + e.message, '#ff4d4f');
+      } finally {
+        const startBtn = document.getElementById('btn-auto-start');
+        const testBtn = document.getElementById('btn-test');
+        if (startBtn) startBtn.disabled = false;
+        if (testBtn) testBtn.disabled = false;
+      }
+    }
+
+    document.getElementById('btn-refresh').addEventListener('click', () => {
+      addLog('正在刷新账号列表...', '#1890ff');
+      accountListEl.innerHTML = '<span style="color:#999; font-size:13px; margin:auto;">加载中...</span>';
+      loadAccounts();
+    });
+    
+    document.getElementById('btn-sel-all').addEventListener('click', () => {
+      document.querySelectorAll('.account-item').forEach(el => el.classList.add('selected'));
+    });
+    document.getElementById('btn-sel-none').addEventListener('click', () => {
+      document.querySelectorAll('.account-item').forEach(el => el.classList.remove('selected'));
+    });
+
+    loadAccounts();
+
+    function getSelectedAccounts() {
+      return Array.from(document.querySelectorAll('.account-item.selected')).map(el => el.dataset.id);
+    }
+    
+    function getAccountName(id) {
+        const acc = allAccounts.find(a => a.id === id);
+        return acc ? acc.name : id;
+    }
+
+    // ==================== 注入的检测代码 ====================
+    const CHECK_LOTTERY_CODE = `
+      (async function() {
+        try {
+          var bagSelectors = [
+            'div[data-e2e="interactive-component-treasure-box"]',
+            'div[data-e2e="interactive-component-lucky-bag"]',
+            'div[data-e2e="treasure-box"]',
+            'div[data-e2e="lucky-bag"]',
+            'div[class*="TreasureBox"]',
+            'div[class*="treasureBox"]',
+            'div[class*="treasure-box"]',
+            'div[class*="LuckyBag"]',
+            'div[class*="luckyBag"]',
+            'div[class*="lucky-bag"]',
+            'div[class*="lucky_bag"]',
+            '#ShortTouchLayout div[class*="treasure"]',
+            '#ShortTouchLayout div[class*="lucky"]',
+            '#ShortTouchLayout div[class*="Treasure"]',
+            '#ShortTouchLayout div[class*="Lucky"]',
+            'div[class*="InteractiveComponent"] div[class*="treasure"]',
+            'div[class*="InteractiveComponent"] div[class*="lucky"]',
+            '.ycjwPFJI',
+            '.redpacket'
+          ];
+          var containerSelectors = ['.LMUtLyr9', '.dVxrjT_h', 'div[class*="InteractiveComponent"]'];
+          var foundBagElement = null;
+          
+          for (var i = 0; i < bagSelectors.length; i++) {
+            var els = document.querySelectorAll(bagSelectors[i]);
+            for (var j = 0; j < els.length; j++) {
+              var el = els[j];
+              var rect = el.getBoundingClientRect();
+              // 仅使用 rect 判断可见性（shield CSS 会导致 offsetParent 为 null）
+              if (rect.width > 0 && rect.height > 0) {
+                // 向上找可点击父容器
+                for (var k = 0; k < containerSelectors.length; k++) {
+                  var container = el.closest(containerSelectors[k]);
+                  if (container) { foundBagElement = container; break; }
+                }
+                if (!foundBagElement) foundBagElement = el;
+                break;
+              }
+              // 降级：DOM 存在且有内容，即使不可见也尝试
+              if (el.innerHTML && el.innerHTML.length > 10) {
+                var style = window.getComputedStyle(el);
+                if (style.display !== 'none') {
+                  for (var k = 0; k < containerSelectors.length; k++) {
+                    var container = el.closest(containerSelectors[k]);
+                    if (container) { foundBagElement = container; break; }
+                  }
+                  if (!foundBagElement) foundBagElement = el;
+                  break;
+                }
+              }
+            }
+            if (foundBagElement) break;
+          }
+          
+          if (foundBagElement) {
+            // 模拟真实点击
+            async function simulateClick(element) {
+              if (!element) return false;
+              try {
+                function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+                element.click();
+                await wait(100);
+                var rect = element.getBoundingClientRect();
+                var cx = rect.left + rect.width / 2;
+                var cy = rect.top + rect.height / 2;
+                var mouseEvents = ['mousedown', 'mouseup', 'click'];
+                for (var j = 0; j < mouseEvents.length; j++) {
+                  var ev = new MouseEvent(mouseEvents[j], {
+                    view: window, bubbles: true, cancelable: true, buttons: 1,
+                    clientX: cx, clientY: cy, screenX: cx, screenY: cy
+                  });
+                  element.dispatchEvent(ev);
+                  await wait(50);
+                }
+                return true;
+              } catch(e) {
+                return false;
+              }
+            }
+
+            function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+            // 第一步：点击福袋图标，打开弹窗
+            await simulateClick(foundBagElement);
+            await wait(1500);
+
+            // 第1.5步：检查参与条件 —— 如果包含"粉丝团"、"转发"、"关注"则放弃
+            var skipKeywords = ['粉丝团', '转发', '关注'];
+            var popupText = document.body.innerText || '';
+            // 尝试更精准地获取福袋弹窗区域的文本
+            var popupContainers = document.querySelectorAll(
+              'div[class*=\"treasure\"], div[class*=\"Treasure\"], div[class*=\"lucky\"], div[class*=\"Lucky\"], div[class*=\"popup\"], div[class*=\"Popup\"], div[class*=\"modal\"], div[class*=\"Modal\"], div[class*=\"dialog\"], div[class*=\"Dialog\"]'
+            );
+            if (popupContainers.length > 0) {
+              popupText = '';
+              for (var pi = 0; pi < popupContainers.length; pi++) {
+                popupText += (popupContainers[pi].innerText || popupContainers[pi].textContent || '') + ' ';
+              }
+            }
+
+            var foundSkipKeyword = null;
+            for (var ki = 0; ki < skipKeywords.length; ki++) {
+              if (popupText.includes(skipKeywords[ki])) {
+                foundSkipKeyword = skipKeywords[ki];
+                break;
+              }
+            }
+
+            if (foundSkipKeyword) {
+              // 福袋需要加入粉丝团/转发/关注，放弃领取
+              return {
+                success: true,
+                found: true,
+                participated: false,
+                skipped: true,
+                reason: '条件包含「' + foundSkipKeyword + '」，已跳过'
+              };
+            }
+
+            // 第二步：在弹窗中查找并点击"一键发评论参与福袋"按钮
+            var participateBtn = null;
+            var participateSelectors = [
+              'button[class*="participate"]',
+              'div[class*="participate"]',
+              'button[class*="Participate"]',
+              'div[class*="Participate"]',
+              'button[class*="one-click"]',
+              'div[class*="oneClick"]',
+              'div[class*="OneClick"]',
+              'button[class*="join"]',
+              'div[class*="join"]',
+              'div[class*="Join"]'
+            ];
+
+            // 尝试通过 selector 查找
+            for (var ps = 0; ps < participateSelectors.length; ps++) {
+              var el = document.querySelector(participateSelectors[ps]);
+              if (el) { participateBtn = el; break; }
+            }
+
+            // 如果 selector 没找到，用文本匹配查找
+            if (!participateBtn) {
+              var allBtns = document.querySelectorAll('button, div[role="button"], div[class*="btn"], div[class*="Btn"]');
+              for (var bi = 0; bi < allBtns.length; bi++) {
+                var txt = allBtns[bi].innerText || allBtns[bi].textContent || '';
+                if (txt.includes('一键') || txt.includes('参与') || txt.includes('领取') || txt.includes('发评论')) {
+                  var btnRect = allBtns[bi].getBoundingClientRect();
+                  if (btnRect.width > 30 && btnRect.height > 15) {
+                    participateBtn = allBtns[bi];
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (participateBtn) {
+              await simulateClick(participateBtn);
+              return { success: true, found: true, participated: true };
+            } else {
+              return { success: true, found: true, participated: false, note: 'popup_btn_not_found' };
+            }
+          } else {
+            return { success: true, found: false };
+          }
+        } catch(e) {
+          return { success: false, error: e.message };
+        }
+      })();
+    `;
+
+    // ==================== 检测逻辑 ====================
+    async function checkAccountLottery(accountId) {
+      const name = getAccountName(accountId);
+      const replyChannel = 'lottery-reply-' + Date.now() + '-' + Math.random().toString(36).substr(2,5);
+      
+      return new Promise((resolve) => {
+        ipcRenderer.once(replyChannel, (event, result) => {
+          resolve({ accountId, name, result });
+        });
+        
+        ipcRenderer.send('execute-webview-js', {
+          accountId: accountId,
+          code: CHECK_LOTTERY_CODE,
+          replyChannel: replyChannel
+        });
+        
+        // Timeout in case it fails silently
+        setTimeout(() => {
+          ipcRenderer.removeAllListeners(replyChannel);
+          resolve({ accountId, name, result: { error: '执行超时' } });
+        }, 8000);
+      });
+    }
+
+    async function runDetectionRound() {
+      const selected = getSelectedAccounts();
+      if (selected.length === 0) {
+        addLog('提示: 请至少选择一个账号', '#ff4d4f');
+        if (autoTaskEnabled) stopAutoTask();
+        return;
+      }
+
+      addLog(`开始对 ${selected.length} 路小号执行突发检测...`, '#1890ff');
+      
+      detectedCount += selected.length;
+      statDetected.innerText = detectedCount;
+
+      for (let i = 0; i < selected.length; i++) {
+        const accId = selected[i];
+        const res = await checkAccountLottery(accId);
+        
+        if (res.result && res.result.success) {
+           if(res.result.found) {
+             foundCount++;
+             statFound.innerText = foundCount;
+             if (res.result.participated) {
+               addLog(`[${res.name}] 🎁 发现福袋 → ✅ 已自动点击参与！`, '#52c41a');
+               claimedCount++;
+               statClaimed.innerText = claimedCount;
+             } else if (res.result.skipped) {
+               addLog(`[${res.name}] 🎁 发现福袋 → 🚫 已跳过（${res.result.reason || '条件不满足'}）`, '#ff8c00');
+             } else {
+               addLog(`[${res.name}] 🎁 发现福袋 → ⚠️ 弹窗已打开，但未找到参与按钮`, '#faad14');
+             }
+           }
+        } else {
+           addLog(`[${res.name}] 检测失败: ${res.result.error}`, '#ff4d4f');
+        }
+        
+        // Slight delay between checking accounts
+        await new Promise(r => setTimeout(r, 200));
+      }
+      
+      addLog(`本轮检测结束。` + (autoTaskEnabled ? ' 等待下一轮...' : ''), '#52c41a');
+    }
+
+    btnTest.addEventListener('click', async () => {
+      btnTest.disabled = true;
+      await runDetectionRound();
+      btnTest.disabled = false;
+    });
+
+    // ==================== 自动循环 ====================
+    function stopAutoTask() {
+      autoTaskEnabled = false;
+      if (autoTaskTimer) {
+        clearInterval(autoTaskTimer);
+        autoTaskTimer = null;
+      }
+      btnAutoStart.disabled = false;
+      btnAutoStop.disabled = true;
+      btnTest.disabled = false;
+      addLog('自动循环检测已停止', '#ff4d4f');
+    }
+
+    btnAutoStart.addEventListener('click', () => {
+      const selected = getSelectedAccounts();
+      if (selected.length === 0) return addLog('提示: 请至少选择一个账号', '#ff4d4f');
+
+      const intervalMin = parseInt(intervalInput.value) || 1;
+      
+      autoTaskEnabled = true;
+      btnAutoStart.disabled = true;
+      btnAutoStop.disabled = false;
+      btnTest.disabled = true;
+      
+      addLog(`启动全生命周期自动检测，间隔 ${intervalMin} 分钟。`, '#52c41a');
+      
+      // Initial run
+      runDetectionRound();
+      
+      // Schedule interval
+      autoTaskTimer = setInterval(() => {
+        runDetectionRound();
+      }, intervalMin * 60 * 1000);
+    });
+
+    btnAutoStop.addEventListener('click', () => {
+      stopAutoTask();
+    });
+
+    // Handle close via IPC or window close
+    window.onbeforeunload = () => {
+      if (autoTaskEnabled) {
+        stopAutoTask();
+      }
+    };
+  </script>
+
+<script>
+    // 防呆：禁止F1-F12和Alt+F4
+    document.addEventListener('keydown', (e) => {
+      if (e.key && /^F([1-9]|1[0-2])$/.test(e.key)) {
+        e.preventDefault();
+      }
+      if (e.altKey) {
+        e.preventDefault();
+      }
+    });
+</script>
+
+</body>
+</html>

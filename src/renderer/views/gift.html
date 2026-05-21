@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>自动送礼控制</title>
+  <style>
+    :root {
+      --primary: #1890ff;
+      --primary-hover: #40a9ff;
+      --danger: #ff4d4f;
+      --danger-hover: #ff7875;
+      --success: #52c41a;
+      --success-hover: #73d13d;
+      --warning: #faad14;
+      --bg: #f5f7fa;
+      --card-bg: #ffffff;
+      --text: #333333;
+      --border: #e8e8e8;
+      --radius: 8px;
+    }
+    body { 
+      font-family: -apple-system, 'Segoe UI', sans-serif; 
+      background: var(--bg); 
+      color: var(--text); 
+      margin: 0; 
+      padding: 20px; 
+      display: flex; 
+      flex-direction: column; 
+      height: 100vh; 
+      box-sizing: border-box; 
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .row { 
+      display: flex; 
+      align-items: center; 
+      margin-bottom: 12px; 
+      gap: 12px; 
+      flex-wrap: wrap;
+    }
+    .row:last-child { margin-bottom: 0; }
+    
+    .label {
+      font-size: 14px; 
+      font-weight: 600; 
+      color: #555;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .btn { 
+      background: var(--primary); 
+      color: white; 
+      border: none; 
+      padding: 8px 16px; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .btn:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+    .btn:active { transform: translateY(0); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .btn:disabled { background: #d9d9d9; cursor: not-allowed; box-shadow: none; transform: none; }
+    
+    .btn.stop { background: var(--danger); }
+    .btn.stop:hover { background: var(--danger-hover); }
+    .btn.success { background: var(--success); }
+    .btn.success:hover { background: var(--success-hover); }
+    .btn.warning { background: var(--warning); color: #fff; }
+    .btn.warning:hover { background: #ffc53d; }
+    .btn.small { padding: 6px 12px; font-size: 13px; }
+    
+    .input {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2); }
+    .input-number { width: 80px; text-align: center; }
+    
+    /* 自定义下拉搜索组件 */
+    .gift-search-wrap { position: relative; }
+    .gift-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 200px;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .gift-dropdown.open { display: block; }
+    .gift-option {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      border-bottom: 1px solid #f5f5f5;
+      transition: background 0.15s;
+    }
+    .gift-option:hover, .gift-option.active { background: #e6f7ff; }
+    .gift-option .match-highlight { color: var(--primary); font-weight: 600; }
+
+    .account-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 4px 0;
+      min-height: 30px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .account-item {
+      display: inline-flex;
+      align-items: center;
+      background: #fff;
+      padding: 5px 14px;
+      border-radius: 16px;
+      font-size: 13px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .account-item:hover { border-color: var(--primary); }
+    .account-item.selected {
+      background: var(--success);
+      color: #fff;
+      border-color: var(--success);
+    }
+    
+    .status-log {
+      font-size: 13px; 
+      color: #444; 
+      background: #f0f5ff; 
+      padding: 8px 16px; 
+      border: 1px solid #adc6ff; 
+      border-radius: 6px; 
+      min-height: 36px; 
+      line-height: 1.5; 
+      overflow-y: auto; 
+      word-break: break-all;
+      display: flex; 
+      align-items: center; 
+      justify-content: flex-start; 
+      margin-top: 16px;
+      font-weight: 500;
+      flex: none;
+    }
+    .log-time { color: #888; margin-right: 8px; font-size: 12px; font-weight: 400; }
+  </style>
+
+<style>
+    /* 防呆：禁止全局选择 */
+    body { user-select: none; -webkit-user-select: none; }
+    input, textarea { user-select: text; -webkit-user-select: text; }
+    </style>
+
+</head>
+<body>
+
+  <div class="card">
+    <div class="row" style="justify-content: space-between;">
+      <span class="label" style="margin:0;">选择送礼账号（可多选）</span>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn small" id="btn-sel-all">全选</button>
+        <button class="btn small stop" id="btn-sel-none">清空</button>
+        <button class="btn small warning" id="btn-refresh">刷新列表</button>
+      </div>
+    </div>
+    <div class="account-list" id="account-list">
+      <span style="color:#999; font-size:13px; margin:auto;">加载中...</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div style="flex: 1;">
+        <span class="label">选择/搜索常规礼物名称</span>
+        <div class="gift-search-wrap">
+          <input type="text" class="input" id="gift-name" placeholder="输入关键字搜索..." value="小心心" style="width: 100%; box-sizing: border-box;" autocomplete="off" />
+          <div class="gift-dropdown" id="gift-dropdown"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top: 16px;">
+      <div style="flex: 1;">
+        <span class="label">发送间隔时间 (秒)</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="number" class="input input-number" id="gift-min-time" value="60" min="1" />
+          <span style="color:#666;">至</span>
+          <input type="number" class="input input-number" id="gift-max-time" value="120" min="1" />
+        </div>
+      </div>
+      <div style="flex: 1;">
+        <span class="label">自动循环次数 (0为一直)</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="number" class="input input-number" id="gift-loop-count" value="0" min="0" />
+          <span style="color:#666;">次</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top: 8px;">
+    <button class="btn success" id="btn-test" style="flex: 1; padding: 0 12px; height: 44px; font-size: 15px; white-space: nowrap; display: flex; align-items: center; justify-content: center;">立即送礼</button>
+    <button class="btn" id="btn-auto-start" style="flex: 1; padding: 0 12px; height: 44px; font-size: 15px; white-space: nowrap; display: flex; align-items: center; justify-content: center;">自动送礼</button>
+    <button class="btn stop" id="btn-auto-stop" disabled style="flex: 1; padding: 0 12px; height: 44px; font-size: 15px; white-space: nowrap; display: flex; align-items: center; justify-content: center;">停止</button>
+  </div>
+
+  <div class="status-log" id="status-log">
+    <div class="log-item"><span class="log-time">[就绪]</span>等待操作...</div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    const fs = require('fs');
+    const path = require('path');
+
+    const accountListEl = document.getElementById('account-list');
+    const giftNameInput = document.getElementById('gift-name');
+    const giftDropdown = document.getElementById('gift-dropdown');
+    const minTimeInput = document.getElementById('gift-min-time');
+    const maxTimeInput = document.getElementById('gift-max-time');
+    const loopCountInput = document.getElementById('gift-loop-count');
+    
+    const btnTest = document.getElementById('btn-test');
+    const btnAutoStart = document.getElementById('btn-auto-start');
+    const btnAutoStop = document.getElementById('btn-auto-stop');
+    const statusLog = document.getElementById('status-log');
+
+    let allAccounts = [];
+    let builtInGifts = [];
+    let autoTaskEnabled = false;
+    let autoTaskTimer = null;
+    let currentLoopCount = 0;
+
+    // ==================== 日志 ====================
+    function addLog(msg, color = '#333') {
+      const time = new Date().toLocaleTimeString();
+      statusLog.innerHTML = `<span class="log-time">[${time}]</span>状态: <span style="color:${color}; margin-left: 4px;">${msg}</span>`;
+    }
+
+    addLog('窗口初始化成功', '#1890ff');
+
+    // ==================== 恢复本地配置 ====================
+    if (localStorage.getItem('gift_min_time')) minTimeInput.value = localStorage.getItem('gift_min_time');
+    if (localStorage.getItem('gift_max_time')) maxTimeInput.value = localStorage.getItem('gift_max_time');
+    if (localStorage.getItem('gift_loop_count')) loopCountInput.value = localStorage.getItem('gift_loop_count');
+    if (localStorage.getItem('gift_name_saved')) giftNameInput.value = localStorage.getItem('gift_name_saved');
+
+    // ==================== 加载礼物 JSON ====================
+    function loadGiftsFromFile() {
+      try {
+        // 尝试多个可能的路径，兼容开发和打包环境
+        const candidates = [];
+
+        // 方式1: 通过 window.location 获取当前文件所在目录
+        if (window.location.protocol === 'file:') {
+          const filePath = decodeURIComponent(window.location.pathname);
+          // Windows 路径需要去掉开头的 /
+          const normalizedPath = process.platform === 'win32' ? filePath.substring(1) : filePath;
+          const viewsDir = path.dirname(normalizedPath);
+          candidates.push(path.join(viewsDir, '..', 'assets', 'douyin_gifts.json'));
+        }
+
+        // 方式2: 通过 process.cwd 
+        candidates.push(path.join(process.cwd(), 'dist', 'renderer', 'assets', 'douyin_gifts.json'));
+        candidates.push(path.join(process.cwd(), 'src', 'renderer', 'assets', 'douyin_gifts.json'));
+        
+        // 方式3: 硬编码的源码位置（开发模式备用）
+        candidates.push('D:\\Douyin Multi-Account Live Messenger - 副本\\douyinnew\\src\\renderer\\assets\\douyin_gifts.json');
+
+        for (const p of candidates) {
+          try {
+            if (fs.existsSync(p)) {
+              const raw = fs.readFileSync(p, 'utf8');
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                builtInGifts = parsed;
+                addLog(`成功从 ${path.basename(path.dirname(p))} 加载 ${parsed.length} 个礼物`, '#52c41a');
+                return;
+              }
+            }
+          } catch (innerErr) {
+            // 继续尝试下一个路径
+          }
+        }
+        addLog('未能加载礼物文件，已尝试所有路径', '#faad14');
+      } catch (e) {
+        addLog('礼物文件加载异常: ' + e.message, '#ff4d4f');
+      }
+    }
+
+    loadGiftsFromFile();
+
+    // ==================== 礼物模糊搜索下拉 ====================
+    function highlightMatch(text, keyword) {
+      if (!keyword) return text;
+      const idx = text.toLowerCase().indexOf(keyword.toLowerCase());
+      if (idx === -1) return text;
+      return text.substring(0, idx) 
+        + '<span class="match-highlight">' + text.substring(idx, idx + keyword.length) + '</span>'
+        + text.substring(idx + keyword.length);
+    }
+
+    function renderGiftDropdown(filterText) {
+      const keyword = (filterText || '').trim().toLowerCase();
+      // 没有输入时显示全部，有输入时模糊匹配
+      const matches = keyword
+        ? builtInGifts.filter(g => g.toLowerCase().includes(keyword))
+        : builtInGifts;
+
+      if (matches.length === 0) {
+        giftDropdown.classList.remove('open');
+        return;
+      }
+      giftDropdown.innerHTML = '';
+      // 最多显示30个，避免列表过长
+      matches.slice(0, 30).forEach(g => {
+        const div = document.createElement('div');
+        div.className = 'gift-option';
+        div.innerHTML = highlightMatch(g, keyword);
+        div.addEventListener('mousedown', (e) => {
+          e.preventDefault(); // 防止 blur 事件先关闭下拉
+          giftNameInput.value = g;
+          giftDropdown.classList.remove('open');
+          saveConfig();
+        });
+        giftDropdown.appendChild(div);
+      });
+      if (matches.length > 30) {
+        const more = document.createElement('div');
+        more.className = 'gift-option';
+        more.style.color = '#999';
+        more.style.textAlign = 'center';
+        more.textContent = `还有 ${matches.length - 30} 个结果，请继续输入缩小范围`;
+        giftDropdown.appendChild(more);
+      }
+      giftDropdown.classList.add('open');
+    }
+
+    giftNameInput.addEventListener('input', () => {
+      renderGiftDropdown(giftNameInput.value);
+      saveConfig();
+    });
+    giftNameInput.addEventListener('focus', () => {
+      renderGiftDropdown(giftNameInput.value);
+    });
+    giftNameInput.addEventListener('blur', () => {
+      // 延迟关闭以允许点击选项
+      setTimeout(() => giftDropdown.classList.remove('open'), 150);
+    });
+
+    // ==================== 保存配置 ====================
+    const saveConfig = () => {
+      localStorage.setItem('gift_min_time', minTimeInput.value);
+      localStorage.setItem('gift_max_time', maxTimeInput.value);
+      localStorage.setItem('gift_loop_count', loopCountInput.value);
+      localStorage.setItem('gift_name_saved', giftNameInput.value);
+    };
+    minTimeInput.addEventListener('change', saveConfig);
+    maxTimeInput.addEventListener('change', saveConfig);
+    loopCountInput.addEventListener('change', saveConfig);
+
+    // ==================== 账号加载 ====================
+    function renderAccountList(accounts) {
+      allAccounts = (accounts || []).sort((a, b) => {
+        const nameA = a.name || a.id || '';
+        const nameB = b.name || b.id || '';
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+      if (allAccounts.length === 0) {
+        accountListEl.innerHTML = '<span style="color:#999; font-size:13px; margin:auto;">未找到活动账号</span>';
+        return;
+      }
+      addLog(`已加载 ${allAccounts.length} 个账号`, '#52c41a');
+      accountListEl.innerHTML = allAccounts.map(acc => `
+        <span class="account-item selected" data-id="${acc.id}">${acc.name || acc.id}</span>
+      `).join('');
+      document.querySelectorAll('.account-item').forEach(el => {
+        el.addEventListener('click', () => el.classList.toggle('selected'));
+      });
+    }
+
+    async function loadAccounts() {
+      const startBtn = document.getElementById('btn-auto-start');
+      const testBtn = document.getElementById('btn-test');
+      if (startBtn) startBtn.disabled = true;
+      if (testBtn) testBtn.disabled = true;
+      try {
+        const saved = await ipcRenderer.invoke('read-accounts');
+        const active = (saved || []).filter(a => !a.isDeleted);
+        renderAccountList(active);
+      } catch (e) {
+        addLog('读取账号失败: ' + e.message, '#ff4d4f');
+      } finally {
+        const startBtn = document.getElementById('btn-auto-start');
+        const testBtn = document.getElementById('btn-test');
+        if (startBtn) startBtn.disabled = false;
+        if (testBtn) testBtn.disabled = false;
+      }
+    }
+
+    document.getElementById('btn-refresh').addEventListener('click', () => {
+      addLog('正在刷新账号列表...', '#1890ff');
+      accountListEl.innerHTML = '<span style="color:#999; font-size:13px; margin:auto;">加载中...</span>';
+      loadAccounts();
+    });
+    
+    document.getElementById('btn-sel-all').addEventListener('click', () => {
+      document.querySelectorAll('.account-item').forEach(el => el.classList.add('selected'));
+    });
+    document.getElementById('btn-sel-none').addEventListener('click', () => {
+      document.querySelectorAll('.account-item').forEach(el => el.classList.remove('selected'));
+    });
+
+    // 初始加载账号
+    loadAccounts();
+
+    function getSelectedAccounts() {
+      return Array.from(document.querySelectorAll('.account-item.selected')).map(el => el.dataset.id);
+    }
+
+    // ==================== 送礼逻辑 ====================
+    async function sendGiftToAccount(accountId, giftName) {
+      ipcRenderer.send('page-action', {
+        accountId: accountId,
+        action: 'send-gift',
+        payload: {
+          giftName: giftName,
+          comboCount: 1
+        }
+      });
+      addLog(`[${accountId}] 已发送 [${giftName}] 动作`, '#1890ff');
+    }
+
+    btnTest.addEventListener('click', async () => {
+      const selected = getSelectedAccounts();
+      const giftName = giftNameInput.value.trim();
+      if (selected.length === 0) return addLog('提示: 请至少选择一个账号', '#ff4d4f');
+      if (!giftName) return addLog('提示: 请填写礼物名称', '#ff4d4f');
+
+      let minInt = parseInt(minTimeInput.value) || 1;
+      let maxInt = parseInt(maxTimeInput.value) || minInt;
+
+      addLog(`开始手动测试送礼: ${giftName}`, '#52c41a');
+      for (let i = 0; i < selected.length; i++) {
+        await sendGiftToAccount(selected[i], giftName);
+        if (i < selected.length - 1) {
+          const waitMs = Math.floor(Math.random() * (maxInt - minInt + 1) + minInt) * 1000;
+          addLog(`等待 ${Math.round(waitMs / 1000)} 秒后继续...`);
+          await new Promise(r => setTimeout(r, waitMs));
+        }
+      }
+      addLog('手动测试派发完毕', '#52c41a');
+    });
+
+    // ==================== 自动循环 ====================
+    async function autoGiftLoop() {
+      if (!autoTaskEnabled) return;
+
+      const giftName = giftNameInput.value.trim();
+      const maxLoops = parseInt(loopCountInput.value) || 0;
+      const selected = getSelectedAccounts();
+
+      if (selected.length === 0 || !giftName) {
+        addLog('提示: 参数缺失，已自动停止', '#ff4d4f');
+        stopAutoTask();
+        return;
+      }
+
+      if (maxLoops > 0) {
+        currentLoopCount++;
+        if (currentLoopCount > maxLoops) {
+          addLog('已达到最大循环次数，任务结束', '#52c41a');
+          stopAutoTask();
+          return;
+        }
+        addLog(`正在执行第 ${currentLoopCount} / ${maxLoops} 次循环...`, '#722ed1');
+      } else {
+        addLog(`正在执行无限循环...`, '#722ed1');
+      }
+
+      let minInt = parseInt(minTimeInput.value) || 1;
+      let maxInt = parseInt(maxTimeInput.value) || minInt;
+
+      for (let i = 0; i < selected.length; i++) {
+        if (!autoTaskEnabled) break;
+        await sendGiftToAccount(selected[i], giftName);
+        
+        if (i < selected.length - 1 && autoTaskEnabled) {
+          const waitMs = Math.floor(Math.random() * (maxInt - minInt + 1) + minInt) * 1000;
+          addLog(`账号间等待 ${Math.round(waitMs / 1000)} 秒...`);
+          await new Promise(r => setTimeout(r, waitMs));
+        }
+      }
+
+      if (!autoTaskEnabled) return;
+
+      const waitMs = Math.floor(Math.random() * (maxInt - minInt + 1) + minInt) * 1000;
+      addLog(`本轮结束，下次发送将在 ${Math.round(waitMs / 1000)} 秒后执行`, '#faad14');
+      autoTaskTimer = setTimeout(() => autoGiftLoop(), waitMs);
+    }
+
+    function stopAutoTask() {
+      autoTaskEnabled = false;
+      if (autoTaskTimer) clearTimeout(autoTaskTimer);
+      autoTaskTimer = null;
+      btnAutoStart.disabled = false;
+      btnAutoStop.disabled = true;
+      btnTest.disabled = false;
+      addLog('自动送礼已停止', '#ff4d4f');
+    }
+
+    btnAutoStart.addEventListener('click', () => {
+      autoTaskEnabled = true;
+      currentLoopCount = 0;
+      btnAutoStart.disabled = true;
+      btnAutoStop.disabled = false;
+      btnTest.disabled = true;
+      addLog('自动送礼循环已启动', '#52c41a');
+      autoGiftLoop();
+    });
+
+    btnAutoStop.addEventListener('click', stopAutoTask);
+
+  </script>
+
+<script>
+    // 防呆：禁止F1-F12和Alt+F4
+    document.addEventListener('keydown', (e) => {
+      if (e.key && /^F([1-9]|1[0-2])$/.test(e.key)) {
+        e.preventDefault();
+      }
+      if (e.altKey) {
+        e.preventDefault();
+      }
+    });
+</script>
+
+</body>
+</html>
