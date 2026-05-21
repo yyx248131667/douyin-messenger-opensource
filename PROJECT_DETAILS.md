@@ -27,7 +27,6 @@ graph TD
         B --> B1[ProtocolGuard - 5层协议安全拦截]
         B --> B2[AccountStateMachine - 账号状态机]
         B --> B3[DouyinSignService - 签名服务桩]
-        B --> B4[JiandanSec - C++ 原生加密模块]
     end
 ```
 
@@ -40,7 +39,7 @@ src/
 │   ├── ipc/              # 定义 IPC 消息通道和注册主进程处理器
 │   ├── lifecycle/        # 应用初始化、窗口生命周期及崩溃自愈
 │   ├── plugins/          # 拓展插件（如抖音签名引擎接口桩）
-│   ├── security/         # 核心安全机制（包含 5 层协议拦截器和 C++ 原生模块）
+│   ├── security/         # 核心安全机制（包含 5 层协议拦截器）
 │   ├── services/         # 全局业务服务（存储、全局自动化引擎、检测状态更新等）
 │   └── window/           # 窗口创建、WebView 配置与多开管理
 ├── preload/              # Preload 脚本（运行在 WebView 沙箱内，可直接操作 DOM）
@@ -111,23 +110,20 @@ src/
 * **开源版实现**: 提供了 `generateABogus` 和 `generateWsSignature` 的空方法，默认返回 `null`。
 * **开发者如何使用**: 您需要自行在此文件中补全这两个加密签名的生成算法。您可以通过调用外部签名 API、注入混淆后的签名 JS 文件（如原版的 `dy_ab.js`）等方式将其重构。
 
-### 3.2 C++ 原生安全防护模块 (`src/main/security/native`)
-为了防止客户端被调试篡改，项目引入了 Node.js C++ 插件 `JiandanSec.cc`，主要功能包括：
-1. **反调试检测**: 检测 PEB 结构体的 `BeingDebugged` 标志以及调用 Win32 原生 API `CheckRemoteDebuggerPresent` 来判断程序是否在调试状态下运行。
-2. **内存强力清退**: 当检测到调试器附加时，通过执行非法空指针写入操作强制制造崩溃，保护软件逻辑。
-3. **硬件特征绑定 (HWID)**: 从 Windows 注册表中读取 BIOS 序列号（`SystemSerialNumber`）和机器唯一标识符（`MachineGuid`），以生成设备硬件码，实现机器授权锁定。
-
-在开发时，如无需这些原生保护，您可以在 `src/main/security/guardian.ts` 中将 `JiandanSec` 的相关硬检测逻辑暂时屏蔽，使其直接返回授权通过。
+### 3.2 安全与合规声明
+为降低法律与隐私风控风险，本开源版本已彻底清理并删除了所有商业闭源版中的以下防线：
+- **反调试与内存清退**：删除了所有扫描 PEB 结构体、挂载 Ring3 API 钩子以及内存防篡改清退逻辑，确保程序以标准沙盒化应用运行，避免杀毒软件误报。
+- **设备硬件特征绑定 (DRM)**：移除了所有读取 Windows 注册表 MachineGuid、BIOS 序列号等隐私敏感信息的 C++ Native 模块，完全免除隐私收集与数字版权管理 (DRM) 限制风险。
 
 ---
 
 ## 4. 开发者上手指南
 
-### 4.1 项目依赖编译
-本项目的 C++ 安全模块基于 `node-addon-api`，在首次运行或打包前，您需要确保本地安装了 C++ 编译环境（如 Visual Studio Build Tools 包含 MSVC 编译器）：
+### 4.1 项目依赖安装
+直接安装标准的 npm 依赖包即可，开源版无需本地编译 C++ Native 模块，运行更加轻量和跨平台：
 
 ```bash
-# 安装依赖（自动触发 node-gyp 编译本地二进制文件）
+# 安装依赖
 npm install
 ```
 

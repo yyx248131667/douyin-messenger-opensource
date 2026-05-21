@@ -51,18 +51,7 @@ const mainConfig = {
     path: path.resolve(__dirname, 'dist/main'),
     filename: '[name].js',
     clean: true // 每次编译前自动清理残留
-  },
-  plugins: [
-    // 复制运行时 JS 引擎文件到 dist/main/
-    new CopyPlugin({
-      patterns: [
-        { from: 'src/main/plugins/douyin-sec/dy_ab.js', to: 'dy_ab.js' },
-        { from: 'src/main/plugins/douyin-sec/dy_live_sign.js', to: 'dy_live_sign.js' },
-        { from: 'src/main/auth/licenseManagerFastAPI.js', to: 'auth/licenseManagerFastAPI.js' },
-        { from: 'src/main/auth/machineCodeManager.js', to: 'auth/machineCodeManager.js' }
-      ]
-    })
-  ]
+  }
 };
 
 // ============================================
